@@ -1,0 +1,77 @@
+一 ：编写集群分发脚本xsync
+1.	scp（secure copy）安全拷贝
+（1）scp定义：
+scp可以实现服务器与服务器之间的数据拷贝。（from server1 to server2）
+	（2）基本语法
+scp    -r          $pdir/$fname              $user@hadoop$host:$pdir/$fname
+命令   递归       要拷贝的文件路径/名称    目的用户@主机:目的路径/名称
+（3）案例实操
+（a）在hadoop101上，将hadoop101中/usr/local/admin目录下的软件拷贝到hadoop102上。
+[admin@hadoop101 /]$ scp -r /usr/local/admin  root@hadoop102:/usr/local/admin
+（b）在hadoop103上，将hadoop101服务器上的/usr/local/admin目录下的软件拷贝到hadoop103上。
+[admin@hadoop103 opt]$sudo scp -r admin@hadoop101:/usr/local/admin root@hadoop103:/usr/local/admin
+（c）在hadoop103上操作将hadoop101中/usr/local/admin目录下的软件拷贝到hadoop104上。
+[admin@hadoop103 opt]$ scp -r admin@hadoop101:/usr/local/admin root@hadoop104:/usr/local/admin
+注意：拷贝过来的/usr/local/admin目录，别忘了在hadoop102、hadoop103、hadoop104上修改所有文件的，所有者和所有者组。sudo chown admin:admin -R /usr/local/admin
+（d）将hadoop101中/etc/profile文件拷贝到hadoop102的/etc/profile上。
+[admin@hadoop101 ~]$ sudo scp /etc/profile root@hadoop102:/etc/profile
+（e）将hadoop101中/etc/profile文件拷贝到hadoop103的/etc/profile上。
+[admin@hadoop101 ~]$ sudo scp /etc/profile root@hadoop103:/etc/profile
+（f）将hadoop101中/etc/profile文件拷贝到hadoop104的/etc/profile上。
+[admin@hadoop101 ~]$ sudo scp /etc/profile root@hadoop104:/etc/profile
+注意：拷贝过来的配置文件别忘了source /etc/profile 。
+2.	 rsync 远程同步工具
+rsync主要用于备份和镜像。具有速度快、避免复制相同内容和支持符号链接的优点。
+rsync和scp区别：用rsync做文件的复制要比scp的速度快，rsync只对差异文件做更新。scp是把所有文件都复制过去。
+	（1）基本语法
+rsync    -rvl       $pdir/$fname              $user@hadoop$host:$pdir/$fname
+命令   选项参数   要拷贝的文件路径/名称    目的用户@主机:目的路径/名称
+	  选项参数说明
+表2-2
+选项	功能
+-r	递归
+-v	显示复制过程
+-l	拷贝符号连接
+（2）案例实操
+		（a）把hadoop101机器上的/opt/admin目录同步到hadoop102服务器的root用户下的/opt/目录
+[admin@hadoop101 opt]$ rsync -rvl /opt/admin/   root@hadoop102:/opt/admin
+3.	xsync集群分发脚本
+（1）需求：循环复制文件到所有节点的相同目录下
+	（2）需求分析：
+（a）rsync命令原始拷贝：
+rsync  -rvl     /usr/local/admin  		 root@hadoop103:/opt/
+		（b）期望脚本：
+xsync要同步的文件名称
+		（c）说明：在/home/admin/bin这个目录下存放的脚本，admin用户可以在系统任何地方直接执行。
+（3）脚本实现
+（a）在/home/admin目录下创建bin目录，并在bin目录下创建文件xsync，文件内容如下：
+[admin@hadoop102 ~]$ mkdir bin
+[admin@hadoop102 ~]$ cd bin/
+[admin@hadoop102 bin]$ touch xsync
+[admin@hadoop102 bin]$ vi xsync
+在该文件中编写如下代码
+#!/bin/bash
+#1 获取输入参数个数，如果没有参数，直接退出
+pcount=$#
+if((pcount==0)); then
+echo no args;
+exit;
+fi
+
+#2 获取文件名称
+p1=$1
+fname=`basename $p1`
+echo fname=$fname
+
+#3 获取上级目录到绝对路径
+pdir=`cd -P $(dirname $p1); pwd`
+echo pdir=$pdir
+
+#4 获取当前用户名称
+user=`whoami`
+
+#5 循环
+for((host=3; host<5; host++)); do
+        echo ------------------- cos$host --------------
+        rsync -rvl $pdir/$fname $user@cos$host:$pdir
+done
